@@ -37,16 +37,12 @@ A self-hosted media stack built around Jellyfin, with automated movie/TV acquisi
 ## Setup
 
 1. Copy `.env.example` to `.env` (or edit the provided `.env`) and fill in the values below.
-2. Create the external network if it doesn't exist:
-   ```bash
-   docker network create webui-network
-   ```
-3. Make sure the paths referenced in `.env` (`DATA_LOCATION`, `MEDIA_STORAGE`, `TORRENT_DOWNLOADS`) exist and are writable by the `PUID`/`PGID` you configure.
-4. Start the stack:
+2. Make sure the paths referenced in `.env` (`DATA_LOCATION`, `MEDIA_STORAGE`, `TORRENT_DOWNLOADS`) exist and are writable by the `PUID`/`PGID` you configure.
+3. Start the stack:
    ```bash
    docker compose up -d
    ```
-5. On first run, visit each service's WebUI to complete setup:
+4. On first run, visit each service's WebUI to complete setup:
    - Jellyfin: `http://localhost:8096`
    - Navidrome: `http://localhost:4533`
    - Prowlarr: `http://localhost:9696`

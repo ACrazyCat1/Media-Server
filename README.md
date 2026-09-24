@@ -16,6 +16,7 @@ A self-hosted media stack built around Jellyfin, with automated movie/TV acquisi
 | **flaresolverr** | Cloudflare bypass proxy for indexers | `8191` | Used by Prowlarr for protected indexers |
 | **radarr** | Movie collection manager | `7878` | |
 | **sonarr** | TV collection manager | `8989` | |
+| **bazarr** | Subtitle manager | `6767` | |
 | **postgres** | Database for AudioMuse-AI | — (internal only) | |
 | **audiomuse-ai-flask** | AudioMuse-AI web app | `8000` | GPU-accelerated music analysis/clustering |
 | **audiomuse-ai-worker** | AudioMuse-AI background job worker | — (internal only) | Shares the Postgres DB and GPU with the Flask app |
@@ -48,6 +49,7 @@ A self-hosted media stack built around Jellyfin, with automated movie/TV acquisi
    - Prowlarr: `http://localhost:9696`
    - Radarr: `http://localhost:7878`
    - Sonarr: `http://localhost:8989`
+   - Bazarr: `http://localhost:6767`
    - qBittorrent: `http://localhost:8080`
    - Seerr: `http://localhost:5055`
    - AudioMuse-AI: `http://localhost:8000`
@@ -110,6 +112,7 @@ By default, all persistent config lives under `${DATA_LOCATION}` (e.g. `/srv/doc
 - The old `jellyseerr` service definition is commented out in favor of `seerr`; remove it once you've confirmed the migration works.
 - Double-check that `PW` is actually referenced somewhere you expect — it doesn't appear to be consumed by any service in the current compose file.
 - Write a comprehensive Documentation in `docs/`.
+- Finish Bazarr integration.
 
 ## Security notes
 

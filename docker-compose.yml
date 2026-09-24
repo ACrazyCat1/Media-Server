@@ -1,0 +1,389 @@
+services:
+  jellyfin:
+    image: jellyfin/jellyfin
+    container_name: jellyfin
+    user: "${PUID:-1000}:${PGID:-1000}"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
+      - JELLYFIN_PublishedServerUrl=${JELLYFIN_SERVER_ADDRESS:-http://localhost:8096}
+    ports:
+      - "${JELLYFIN_SERVER_PORT:-8096}:8096/tcp"
+      - "7359:7359/udp"
+    volumes:
+      - "${DATA_LOCATION:-/srv/appdata}/.jellyfin/config:/config"
+      - "${DATA_LOCATION:-/srv/appdata}/.jellyfin/cache:/cache"
+      - "${MEDIA_STORAGE}:/media"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8096/System/Info/Public || exit 1"]
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    restart: 'unless-stopped'
+    networks:
+      - jellyfin-network
+  
+  navidrome:
+    image: deluan/navidrome:latest
+    container_name: navidrome
+    user: 1000:1000
+    environment:
+      - ND_PLUGINS_ENABLED=true
+      - ND_PLUGINS_AUTORELOAD=true
+      - ND_AGENTS=audiomuseai,lastfm,deezer
+      - ND_DEVARTISTINFOTIMETOLIVE=1s
+    ports:
+      - "${NAVIDROME_PORT:-4533}:4533"
+    volumes:
+      - "${DATA_LOCATION:-/srv/appdata}/.navidrome/data:/data"
+      - "${MEDIA_STORAGE}/Music:/music:ro"
+    restart: 'unless-stopped'
+    networks:
+      - jellyfin-network
+
+  # jellyseerr:
+  #   image: fallenbagel/jellyseerr:latest
+  #   container_name: jellyseerr
+  #   environment:
+  #     - LOG_LEVEL=debug
+  #     - TZ=${TZ:-UTC}
+  #     - PORT=5055
+  #   ports:
+  #     - "${JELLYSEERR_PORT:-5055}:5055"
+  #   volumes:
+  #     - "${JELLYSEERR_CONFIG:-$HOME/DockerData/.jellyseerr/config}:/app/config"
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5055/api/v1/status || exit 1" ]
+  #     start_period: 20s
+  #     timeout: 3s
+  #     interval: 15s
+  #     retries: 3
+  #   restart: 'unless-stopped'
+  #   networks:
+  #     - jellyfin-network
+  seerr:
+    image: ghcr.io/seerr-team/seerr:latest
+    init: true
+    container_name: seerr
+    environment:
+      - LOG_LEVEL=debug
+      - TZ=${TZ:-UTC}
+      - PORT=5055 #optional
+    ports:
+      - "${SEERR_PORT:-5055}:5055"
+    volumes:
+      - "${DATA_LOCATION:-/srv/appdata}/.seerr/config:/app/config"
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:5055/api/v1/settings/public || exit 1
+      start_period: 20s
+      timeout: 3s
+      interval: 15s
+      retries: 3
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    networks:
+      - jellyfin-network
+
+
+  feishin:
+    image: 'ghcr.io/jeffvli/feishin:latest'
+    container_name: feishin
+    environment:
+      - SERVER_NAME=${JELLYFIN_SERVER_NAME}
+      - SERVER_LOCK=${FEISHIN_SERVER_LOCK:-true}
+      - SERVER_TYPE=${FEISHIN_SERVER_TYPE:-jellyfin}
+      - SERVER_URL=${FEISHIN_SERVER_URL:-http://localhost:8096}
+      # - PUID=${PUID:-1000}
+      # - PGID=${PGID:-1000}
+      - UMASK=002
+      - TZ=${TZ:-UTC}
+    ports:
+      - "${FEISHIN_PORT:-9180}:9180"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9180/ || exit 1"]
+      start_period: 20s
+      timeout: 3s
+      interval: 15s
+      retries: 3
+    restart: 'unless-stopped'
+    networks:
+      - jellyfin-network
+
+  # This is where the slightly less than legal services exist.
+  gluetun:
+    image: qmcgaw/gluetun
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      - VPN_SERVICE_PROVIDER=${VPN_SERVICE_PROVIDER}
+      - VPN_TYPE=${VPN_TYPE}
+      # OpenVPN:
+      - OPENVPN_USER=${OPENVPN_USER}
+      - OPENVPN_PASSWORD=${OPENVPN_PASSWORD}
+      # Wireguard:
+      - WIREGUARD_PRIVATE_KEY=${WIREGUARD_PRIVATE_KEY}
+      - WIREGUARD_ADDRESSES=${WIREGUARD_ADDRESSES}
+      - TZ=${TZ:-UTC}
+      - SERVER_COUNTRIES=${VPN_SERVER_COUNTRIES:-United States}
+      - FIREWALL_OUTBOUND_SUBNETS=${LAN_SUBNET:-192.168.0.0/24}
+      - HTTPPROXY=${GLUETUN_HTTP_PROXY:-on}
+    ports:
+      - "${QBITTORRENT_PORT:-8080}:${QBITTORRENT_PORT:-8080}"
+      - "6881:6881"
+      - "6881:6881/udp"
+      - "8888:8888"   # HTTP proxy
+    volumes:
+      - "${DATA_LOCATION:-/srv/appdata}/.gluetun:/gluetun"
+    healthcheck:
+      test: ["CMD", "/gluetun-entrypoint", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - jellyfin-network
+
+  qbittorrent:
+    image: linuxserver/qbittorrent
+    container_name: qbittorrent
+    network_mode: service:gluetun
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-UTC}
+      - WEBUI_PORT=${QBITTORRENT_PORT:-8080}
+      - TORRENTING_PORT=6881
+    volumes:
+      - "${DATA_LOCATION:-/srv/appdata}/.qbittorrent/config:/config"
+      - "${TORRENT_DOWNLOADS}:/downloads"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:${QBITTORRENT_PORT:-8080}|| exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    restart: unless-stopped
+
+  prowlarr:
+    image: ghcr.io/hotio/prowlarr
+    container_name: prowlarr
+    ports:
+      - "${PROWLARR_PORT:-9696}:9696"
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-UTC}
+      - HTTP_PROXY=${PROWLARR_HTTP_PROXY}
+      - HTTPS_PROXY=${PROWLARR_HTTPS_PROXY}
+      - NO_PROXY=localhost,127.0.0.1,radarr,sonarr,flaresolverr,jellyfin,qbittorrent
+    volumes:
+      - "${DATA_LOCATION:-/srv/appdata}/.prowlarr/config:/config"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:9696/ping || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    networks:
+      - jellyfin-network
+    restart: unless-stopped
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_FILE=${LOG_FILE:-none}
+      - LOG_HTML=${LOG_HTML:-false}
+      - CAPTCHA_SOLVER=${CAPTCHA_SOLVER:-none}
+      - TZ=${TZ:-UTC}
+    ports:
+      - "${FLARESOLVERR_PORT:-8191}:8191"
+    volumes:
+      - "${DATA_LOCATION:-/srv/appdata}/.flaresolverr/config:/config"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:8191/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - jellyfin-network
+
+  radarr:
+    image: ghcr.io/hotio/radarr
+    container_name: radarr
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - UMASK=002
+      - TZ=${TZ:-UTC}
+    ports:
+      - "${RADARR_PORT:-7878}:7878"
+    volumes:
+      - "${DATA_LOCATION:-/srv/appdata}/.radarr/config:/config"
+      - "${MEDIA_STORAGE}/Movies:/Movies"
+      - "${TORRENT_DOWNLOADS}:/downloads"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:7878/ping || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - jellyfin-network
+
+  sonarr:
+    image: ghcr.io/hotio/sonarr
+    container_name: sonarr
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - UMASK=002
+      - TZ=${TZ:-UTC}
+    ports:
+      - "${SONARR_PORT:-8989}:8989"
+    volumes:
+      - "${DATA_LOCATION:-/srv/appdata}/.sonarr/config:/config"
+      - "${MEDIA_STORAGE}/TV Shows:/TV"
+      - "${TORRENT_DOWNLOADS}:/downloads"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8989/ping || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - jellyfin-network
+
+# PostgreSQL database service
+  postgres:
+    image: postgres:15-alpine
+    container_name: audiomuse-postgres
+    environment:
+      - TZ=${TZ:-UTC}
+      - POSTGRES_USER=${POSTGRES_USER:-audiomuse}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=audiomusedb
+    volumes:
+      - postgres-data:/var/lib/postgresql/data # Persistent storage for PostgreSQL data
+    restart: unless-stopped
+    networks:
+      - jellyfin-network
+
+# AudioMuse-AI Flask application service
+  audiomuse-ai-flask:
+    image: ghcr.io/neptunehub/audiomuse-ai:latest-nvidia
+    container_name: audiomuse-ai-flask-app
+    ports:
+      - "${FRONTEND_PORT:-8000}:8000" # Map host port 8000 to container port 8000
+    environment:
+      - SERVICE_TYPE=flask # Tells the container to run the Flask app
+      - TZ="${TZ:-UTC}"
+        # DATABASE_URL is now constructed by config.py from the following:
+      - POSTGRES_USER=${POSTGRES_USER:-audiomuse}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=audiomusedb
+      - POSTGRES_HOST=postgres # Service name of the postgres container
+      - POSTGRES_PORT=5432 # Internal port - always 5432 inside the Docker network
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - USE_GPU_CLUSTERING=${USE_GPU_CLUSTERING:-true}
+      - TEMP_DIR=/app/temp_audio
+    volumes:
+      - temp-audio-flask:/app/temp_audio # Volume for temporary audio files
+      - plugins-flask:/app/plugin/installed # This container's own plugins cache (code + pip deps)
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - jellyfin-network
+      - webui-network
+
+# AudioMuse-AI Queue Worker service
+  audiomuse-ai-worker:
+    image: ghcr.io/neptunehub/audiomuse-ai:latest-nvidia
+    container_name: audiomuse-ai-worker-instance
+    environment:
+      - SERVICE_TYPE=worker # Tells the container to run the queue workers
+      - TZ=${TZ:-UTC}
+      # DATABASE_URL is now constructed by config.py from the following:
+      - POSTGRES_USER=${POSTGRES_USER:-audiomuse}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-audiomusepassword}
+      - POSTGRES_DB=audiomusedb
+      - POSTGRES_HOST=postgres # Service name of the postgres container
+      - POSTGRES_PORT=5432 # Internal port - always 5432 inside the Docker network
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - USE_GPU_CLUSTERING=${USE_GPU_CLUSTERING:-true}
+      - TEMP_DIR=/app/temp_audio
+    volumes:
+      - temp-audio-worker:/app/temp_audio # Volume for temporary audio files
+      - plugins-worker:/app/plugin/installed # This container's own plugins cache (code + pip deps)
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - jellyfin-network
+
+
+  # watchtower:
+
+# Define volumes for persistent data and temporary files
+volumes:
+  postgres-data:
+  temp-audio-flask: # Volume for Flask app's temporary audio
+  temp-audio-worker: # Volume for Worker's temporary audio
+  # Installed plugins live here (not in the database). Flask and worker each keep
+  # their own copy and install into it, so plugins are reused across restarts.
+  plugins-flask:
+  plugins-worker:
+
+networks:
+  jellyfin-network:
+    name: jellyfin-network
+    driver: bridge
+  webui-network:
+    external: true
+
+
+# Notes
+# Update the directories to use .env file

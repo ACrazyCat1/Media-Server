@@ -31,6 +31,7 @@ services:
     networks:
       - jellyfin-network
   
+
   navidrome:
     image: deluan/navidrome:latest
     container_name: navidrome
@@ -49,26 +50,7 @@ services:
     networks:
       - jellyfin-network
 
-  # jellyseerr:
-  #   image: fallenbagel/jellyseerr:latest
-  #   container_name: jellyseerr
-  #   environment:
-  #     - LOG_LEVEL=debug
-  #     - TZ=${TZ:-UTC}
-  #     - PORT=5055
-  #   ports:
-  #     - "${JELLYSEERR_PORT:-5055}:5055"
-  #   volumes:
-  #     - "${JELLYSEERR_CONFIG:-$HOME/DockerData/.jellyseerr/config}:/app/config"
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5055/api/v1/status || exit 1" ]
-  #     start_period: 20s
-  #     timeout: 3s
-  #     interval: 15s
-  #     retries: 3
-  #   restart: 'unless-stopped'
-  #   networks:
-  #     - jellyfin-network
+
   seerr:
     image: ghcr.io/seerr-team/seerr:latest
     init: true
@@ -120,6 +102,7 @@ services:
     networks:
       - jellyfin-network
 
+
   # This is where the slightly less than legal services exist.
   gluetun:
     image: qmcgaw/gluetun
@@ -158,6 +141,7 @@ services:
     networks:
       - jellyfin-network
 
+
   qbittorrent:
     image: linuxserver/qbittorrent
     container_name: qbittorrent
@@ -181,6 +165,7 @@ services:
       gluetun:
         condition: service_healthy
     restart: unless-stopped
+
 
   prowlarr:
     image: ghcr.io/hotio/prowlarr
@@ -209,6 +194,7 @@ services:
       - jellyfin-network
     restart: unless-stopped
 
+
   flaresolverr:
     image: ghcr.io/flaresolverr/flaresolverr:latest
     container_name: flaresolverr
@@ -231,6 +217,7 @@ services:
     restart: unless-stopped
     networks:
       - jellyfin-network
+
 
   radarr:
     image: ghcr.io/hotio/radarr
@@ -256,6 +243,7 @@ services:
     networks:
       - jellyfin-network
 
+
   sonarr:
     image: ghcr.io/hotio/sonarr
     container_name: sonarr
@@ -280,6 +268,7 @@ services:
     networks:
       - jellyfin-network
 
+
 # PostgreSQL database service
   postgres:
     image: postgres:15-alpine
@@ -294,6 +283,7 @@ services:
     restart: unless-stopped
     networks:
       - jellyfin-network
+
 
 # AudioMuse-AI Flask application service
   audiomuse-ai-flask:
@@ -329,7 +319,7 @@ services:
               capabilities: [gpu]
     networks:
       - jellyfin-network
-      - webui-network
+
 
 # AudioMuse-AI Queue Worker service
   audiomuse-ai-worker:
@@ -381,9 +371,3 @@ networks:
   jellyfin-network:
     name: jellyfin-network
     driver: bridge
-  webui-network:
-    external: true
-
-
-# Notes
-# Update the directories to use .env file
